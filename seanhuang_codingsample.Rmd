@@ -1,0 +1,227 @@
+---
+title: "Analysis of Hospital Data - Sean Huang"
+output:
+  pdf_document: default
+  html_notebook: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+library(tidyverse)
+library(dplyr)
+library(lmtest)
+library(car)
+
+
+hospital <- read.csv("hospital_data.csv")
+hospital
+
+```
+
+# Explanatory Data Analysis
+
+```{r}
+plot(hospital$Beds, hospital$InfctRsk, ylab = "InfctRsk", xlab = "Beds")
+```
+
+```{r}
+plot(hospital$Facilities, hospital$InfctRsk, ylab = "InfctRsk", xlab = "Facilities")
+```
+
+```{r}
+plot(hospital$MedSchool, hospital$InfctRsk, ylab = "InfctRsk", xlab = "MedSchool")
+```
+
+```{r}
+pairs(~ Beds + Facilities + MedSchool, data=hospital)
+```
+There seems to be trend between beds to infection risk and facilities to infection risk, most likely it is quadratic since there is a bit of curve. Meanwhile it is a bit difficult to determine a relationship for Med School to infection risk since it is a categorical variable. In addition, there might be a problem of multicollinearity between beds and facilities.
+
+
+# Methodology
+
+## Model 1 
+
+```{r}
+model1 <- lm(hospital$InfctRsk ~ hospital$Beds + hospital$Facilities + hospital$MedSchool)
+summary(model1)
+vif(model1)
+```
+The first model ran with all variables and with no higher order. There appears to have multicollinearity between beds and facilities so will rerun without either variable.
+
+## Model 2 - Beds and MedSchool Only
+
+```{r}
+model2 <- lm(hospital$InfctRsk ~ hospital$Beds + hospital$MedSchool)
+summary(model2)
+vif(model2)
+```
+
+## Model 3 - Facilities and MedSchool Only
+
+```{r}
+model3 <- lm(hospital$InfctRsk ~ hospital$Facilities + hospital$MedSchool)
+summary(model3)
+vif(model3)
+```
+Since the third model had the higher adjusted $R^2$ value or explanatory power, the third model is chosen.
+
+## Checking the assumptions for Model 3
+
+### Normality
+```{r}
+plot(model3, which=2)
+shapiro.test(residuals(model3))
+```
+Normality is satisfied.
+
+### Constant variance
+```{r}
+plot(model3$fitted.values, model3$residuals, xlab='Residuals', ylab='Fitted Value')
+abline(h=0,lty=2)
+bptest(model3)
+```
+Constant variance is satisfied.
+
+### Independence
+```{r}
+durbinWatsonTest(model3)
+```
+Independence is satisfied.
+
+### Mean of error
+```{r}
+crPlots(model3)
+```
+There seems to be a problem with facilities as it does not follow a linear trend instead a quadratic term might be needed.
+
+
+## Model 4 - Facilities^2
+
+```{r}
+model4 <- lm(hospital$InfctRsk ~ hospital$Facilities + I(hospital$Facilities^2) + hospital$MedSchool)
+summary(model4)
+```
+
+The fourth model seems the best so far with the addition of the quadratic term.
+
+
+## Model 5 - Interaction
+
+```{r}
+model5 <- lm(hospital$InfctRsk ~ hospital$Facilities * hospital$MedSchool)
+summary(model5)
+```
+There does not seem to be an interaction between Facilities and MedSchool. 
+
+## Model 6 - Interaction with Higher Order Term
+
+```{r}
+model6 <- lm(hospital$InfctRsk ~ hospital$Facilities * I(hospital$Facilities^2) * hospital$MedSchool)
+summary(model6)
+```
+There does not seem to be an interaction between Facilities and MedSchool.
+
+## Model 7 - Removed MedSchool since it is insignificant
+
+```{r}
+model7 <- lm(hospital$InfctRsk ~ hospital$Facilities + I(hospital$Facilities^2))
+summary(model7)
+```
+
+## Final Model
+
+```{r}
+plot(hospital$Facilities, hospital$InfctRsk, ylab = "InfctRsk", xlab = "Facilities")
+lines(sort(hospital$Facilities), fitted(model7)[order(hospital$Facilities)], col='red')
+```
+
+The final model chosen is:
+$InfctRsk = 0.748564 + 0.142225*Facilities - 0.001210*Facilities^2$
+
+The infection risk when there is no facility (or facility = 0) is 0.748564.
+For each increase of a facility, infection risk is both increased by 0.142225 and decreased by $0.001210*Facilities^2$. For example, if facility is 1, then infection risk is increased by 0.120445.
+
+### Outliers and Influencial Results
+
+```{r}
+plot(seq(1,113), rstandard(model7), ylab = "Standardized Residuals",
+xlab = "Observation ID")
+plot(cooks.distance(model7), ylab = "Cook's Distance",
+xlab = "Observation ID")
+```
+While there appears to be outliers, they are of not much concern since Cook's Distance shows that they are not influential.
+
+## Appendix
+
+```{r, include=TRUE}
+library(tidyverse)
+library(dplyr)
+library(lmtest)
+library(car)
+
+hospital <- read.csv("hospital_data.csv")
+hospital
+
+# Explanatory Data Analysis
+## Scatter Plots
+plot(hospital$Beds, hospital$InfctRsk, ylab = "InfctRsk", xlab = "Beds")
+plot(hospital$Facilities, hospital$InfctRsk, ylab = "InfctRsk", xlab = "Facilities")
+plot(hospital$MedSchool, hospital$InfctRsk, ylab = "InfctRsk", xlab = "MedSchool")
+## Correlation Plots
+pairs(~ Beds + Facilities + MedSchool, data=hospital)
+
+# Methodology
+## Model 1 
+model1 <- lm(hospital$InfctRsk ~ hospital$Beds + hospital$Facilities + hospital$MedSchool)
+summary(model1)
+vif(model1)
+## Model 2 - Beds and MedSchool Only
+model2 <- lm(hospital$InfctRsk ~ hospital$Beds + hospital$MedSchool)
+summary(model2)
+vif(model2)
+## Model 3 - Facilities and MedSchool Only
+model3 <- lm(hospital$InfctRsk ~ hospital$Facilities + hospital$MedSchool)
+summary(model3)
+vif(model3)
+### Checking the assumptions for Model 3
+#### Normality - QQ Plot and Shapiro-Wilkes
+plot(model3, which=2)
+shapiro.test(residuals(model3))
+#### Constant variance - Residuals vs Fitted Plot and Breush-Pagan
+plot(model3$fitted.values, model3$residuals, xlab='Residuals', ylab='Fitted Value')
+abline(h=0,lty=2)
+bptest(model3)
+#### Independence - Durbin Watson
+durbinWatsonTest(model3)
+#### Mean of error
+crPlots(model3)
+## Model 4 - Facilities^2
+model4 <- lm(hospital$InfctRsk ~ hospital$Facilities + I(hospital$Facilities^2) + hospital$MedSchool)
+summary(model4)
+## Model 5 - Interaction
+model5 <- lm(hospital$InfctRsk ~ hospital$Facilities * hospital$MedSchool)
+summary(model5)
+## Model 6 - Interaction with Higher Order Term
+model6 <- lm(hospital$InfctRsk ~ hospital$Facilities * I(hospital$Facilities^2) * hospital$MedSchool)
+summary(model6)
+## Model 7 - Removed MedSchool since it is insignificant
+model7 <- lm(hospital$InfctRsk ~ hospital$Facilities + I(hospital$Facilities^2))
+summary(model7)
+
+# Final Model Plot
+plot(hospital$Facilities, hospital$InfctRsk, ylab = "InfctRsk", xlab = "Facilities")
+lines(sort(hospital$Facilities), fitted(model7)[order(hospital$Facilities)], col='red')
+
+# Outliers
+plot(seq(1,113), rstandard(model7), ylab = "Standardized Residuals",
+xlab = "Observation ID")
+# Cook's Distance
+plot(cooks.distance(model7), ylab = "Cook's Distance",
+xlab = "Observation ID")
+```
